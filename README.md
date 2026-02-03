@@ -49,7 +49,13 @@ A [Databricks App](https://docs.databricks.com/aws/en/dev-tools/databricks-apps)
 
 The app can connect to a SQL warehouse in **another** Databricks workspace (not the one where the app runs). You configure this with environment variables; the app does **not** use the built-in SQL warehouse resource for the remote warehouse.
 
-**Steps:**
+**If you see:** *"Other-workspace mode is on but REMOTE_DATABRICKS_TOKEN is not set"* — do this:
+
+1. **Add a secret resource:** App → **Configure** → **App resources** → **+ Add resource** → **Secret**. Choose the scope/key where the other workspace's PAT is stored; set the **resource key** to `remote_databricks_token`. Save.
+2. **Set the env in `app.yaml`:** In the app folder, under `env`, uncomment the `REMOTE_DATABRICKS_TOKEN` block so it reads: `- name: REMOTE_DATABRICKS_TOKEN` and `valueFrom: remote_databricks_token`.
+3. **Redeploy** the app.
+
+**Steps (full first-time setup):**
 
 1. **Create a secret for the other workspace’s token**  
    In the workspace where the app runs: **Settings** → **Secrets** (or use a secret scope). Create a secret that holds a [personal access token (PAT)](https://docs.databricks.com/aws/en/dev-tools/auth.html#pat) or OAuth credentials for the **other** workspace (the one that has the SQL warehouse and the data).  

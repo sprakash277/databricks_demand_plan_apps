@@ -14,7 +14,10 @@ env:
   #   valueFrom: sql_warehouse
   # Or DATABRICKS_HTTP_PATH. If unset, app shows sidebar input for HTTP path.
   # --- Other-workspace: SQL warehouse in a different workspace ---
-  # Set all three (host and path as value, token via valueFrom secret):
+  # When REMOTE_WORKSPACE_HOST and REMOTE_HTTP_PATH are set, you must also:
+  # 1. Add a Secret app resource: Configure → App resources → + Add resource → Secret;
+  #    set resource key to "remote_databricks_token" (scope/key = where the other workspace's PAT is stored).
+  # 2. Uncomment REMOTE_DATABRICKS_TOKEN below.
   # - name: REMOTE_WORKSPACE_HOST
   #   value: "other-workspace.cloud.databricks.com"
   # - name: REMOTE_HTTP_PATH

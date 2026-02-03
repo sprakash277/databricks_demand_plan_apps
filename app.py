@@ -10,6 +10,7 @@ Deploy as a Databricks App: https://docs.databricks.com/aws/en/dev-tools/databri
 import os
 from datetime import date
 from io import BytesIO
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
@@ -27,6 +28,7 @@ def dataframe_to_xlsx_bytes(df: pd.DataFrame) -> bytes:
 
 # -----------------------------------------------------------------------------
 # Connection (same-workspace or other-workspace SQL warehouse)
+# Uses: from databricks import sql; sql.connect(server_hostname=..., http_path=..., access_token=...)
 # -----------------------------------------------------------------------------
 
 def _is_remote_workspace() -> bool:
@@ -34,24 +36,40 @@ def _is_remote_workspace() -> bool:
     return bool(os.getenv("REMOTE_WORKSPACE_HOST") and os.getenv("REMOTE_HTTP_PATH"))
 
 
-@st.cache_resource
-def get_connection(server_hostname: str, http_path: str, use_remote_token: bool = False):
-    """Connect to a SQL warehouse. Same-workspace uses Config(); other-workspace uses REMOTE_* env + token."""
-    if use_remote_token:
-        token = os.getenv("REMOTE_DATABRICKS_TOKEN", "").strip()
+def _get_access_token(use_remote: bool) -> Optional[str]:
+    """Resolve access_token for sql.connect. Remote: REMOTE_DATABRICKS_TOKEN; same-workspace: Config or DATABRICKS_TOKEN. Returns None if same-workspace and no token (caller may use credentials_provider)."""
+    if use_remote:
+        token = (os.getenv("REMOTE_DATABRICKS_TOKEN") or "").strip()
         if not token:
             raise ValueError("REMOTE_DATABRICKS_TOKEN is required for other-workspace connection.")
-        return sql.connect(
+        return token
+    cfg = Config()
+    auth = cfg.authenticate() if hasattr(cfg, "authenticate") and callable(cfg.authenticate) else None
+    if isinstance(auth, dict) and auth.get("access_token"):
+        return auth["access_token"]
+    token = getattr(cfg, "token", None) or os.getenv("DATABRICKS_TOKEN", "").strip()
+    return token if token else None
+
+
+@st.cache_resource
+def get_connection(server_hostname: str, http_path: str, use_remote_token: bool = False):
+    """Connect to a SQL warehouse using databricks.sql.connect(server_hostname, http_path, access_token)."""
+    access_token = _get_access_token(use_remote_token)
+    if access_token is not None:
+        connection = sql.connect(
             server_hostname=server_hostname,
             http_path=http_path,
-            access_token=token,
+            access_token=access_token,
         )
-    cfg = Config()
-    return sql.connect(
-        server_hostname=cfg.host,
-        http_path=http_path,
-        credentials_provider=lambda: cfg.authenticate(),
-    )
+    else:
+        # Same-workspace fallback when no token (e.g. app uses SQL warehouse resource only)
+        cfg = Config()
+        connection = sql.connect(
+            server_hostname=cfg.host,
+            http_path=http_path,
+            credentials_provider=lambda: cfg.authenticate(),
+        )
+    return connection
 
 
 def get_connection_params() -> tuple[str, str, bool]:
@@ -237,10 +255,14 @@ except Exception as e:
     st.error(f"Could not connect to SQL warehouse: {e}")
     st.stop()
 
-def run_query(conn, query, label: str):
-    with conn.cursor() as cursor:
+def run_query(connection, query, label: str):
+    """Execute SQL and return a DataFrame. Uses cursor.execute / fetchall_arrow pattern."""
+    cursor = connection.cursor()
+    try:
         cursor.execute(query)
         return cursor.fetchall_arrow().to_pandas()
+    finally:
+        cursor.close()
 
 st.subheader("Historical consumption (MoM growth)")
 with st.spinner("Running historical consumption query…"):
