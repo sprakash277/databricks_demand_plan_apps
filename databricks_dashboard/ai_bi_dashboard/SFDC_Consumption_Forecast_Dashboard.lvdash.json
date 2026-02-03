@@ -1,0 +1,411 @@
+{
+  "datasets": [
+    {
+      "name": "a1b2c3d4",
+      "displayName": "historical-consumption",
+      "query": "SELECT sfdc_account_id, sfdc_workspace_id, sfdc_workspace_name, sku_name, DATE_TRUNC('MONTH', date) AS month, usage_quantity, usage_dollars, usage_dollars_at_list FROM main.fin_live_gold.paid_usage_metering WHERE sfdc_account_id = :sfdc_account_id AND date >= :historical_start AND date <= :historical_end ORDER BY month DESC, usage_dollars DESC LIMIT 5000",
+      "parameters": [
+        {
+          "displayName": "SFDC Account ID",
+          "keyword": "sfdc_account_id",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [{ "value": "" }]
+            }
+          }
+        },
+        {
+          "displayName": "Historical Start",
+          "keyword": "historical_start",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [{ "value": "2024-01-01" }]
+            }
+          }
+        },
+        {
+          "displayName": "Historical End",
+          "keyword": "historical_end",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [{ "value": "2025-12-31" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "e5f6a7b8",
+      "displayName": "forecast-scenario",
+      "query": "WITH baseline AS (SELECT COALESCE(SUM(usage_dollars), 1) AS total FROM main.fin_live_gold.paid_usage_metering WHERE sfdc_account_id = :sfdc_account_id AND date >= ADD_MONTHS(DATE_TRUNC('MONTH', :historical_end), -1) AND date <= :historical_end), forecast_months AS (SELECT EXPLODE(SEQUENCE(DATE_TRUNC('MONTH', :forecast_start), DATE_TRUNC('MONTH', :forecast_end), INTERVAL 1 MONTH)) AS month), with_yr AS (SELECT fm.month, CAST(FLOOR(MONTHS_BETWEEN(fm.month, DATE_TRUNC('MONTH', :forecast_start)) / 12) + 1 AS INT) AS yr_num FROM forecast_months fm), with_growth AS (SELECT month, yr_num, CONCAT('Yr', yr_num) AS year_bucket, CASE yr_num WHEN 1 THEN :organic_growth_yr1 WHEN 2 THEN :organic_growth_yr2 ELSE :organic_growth_yr3 END AS organic_growth_pct, b.total AS baseline_dollars FROM with_yr CROSS JOIN baseline b WHERE yr_num >= 1) SELECT month, year_bucket, ROUND(organic_growth_pct, 2) AS organic_growth_pct, ROUND(CASE yr_num WHEN 1 THEN baseline_dollars * (1 + :organic_growth_yr1 / 100) WHEN 2 THEN baseline_dollars * (1 + :organic_growth_yr1 / 100) * (1 + :organic_growth_yr2 / 100) ELSE baseline_dollars * (1 + :organic_growth_yr1 / 100) * (1 + :organic_growth_yr2 / 100) * (1 + :organic_growth_yr3 / 100) END, 2) AS projected_usage_dollars FROM with_growth ORDER BY month",
+      "parameters": [
+        {
+          "displayName": "SFDC Account ID",
+          "keyword": "sfdc_account_id",
+          "dataType": "STRING",
+          "defaultSelection": {
+            "values": {
+              "dataType": "STRING",
+              "values": [{ "value": "" }]
+            }
+          }
+        },
+        {
+          "displayName": "Historical End",
+          "keyword": "historical_end",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [{ "value": "2025-12-31" }]
+            }
+          }
+        },
+        {
+          "displayName": "Forecast Start",
+          "keyword": "forecast_start",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [{ "value": "2026-01-01" }]
+            }
+          }
+        },
+        {
+          "displayName": "Forecast End",
+          "keyword": "forecast_end",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [{ "value": "2028-12-01" }]
+            }
+          }
+        },
+        {
+          "displayName": "Yr1 growth %",
+          "keyword": "organic_growth_yr1",
+          "dataType": "DECIMAL",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DECIMAL",
+              "values": [{ "value": "5" }]
+            }
+          }
+        },
+        {
+          "displayName": "Yr2 growth %",
+          "keyword": "organic_growth_yr2",
+          "dataType": "DECIMAL",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DECIMAL",
+              "values": [{ "value": "5" }]
+            }
+          }
+        },
+        {
+          "displayName": "Yr3 growth %",
+          "keyword": "organic_growth_yr3",
+          "dataType": "DECIMAL",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DECIMAL",
+              "values": [{ "value": "5" }]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "p1sfdc01",
+      "displayName": "SFDC Consumption & Forecast",
+      "layout": [
+        {
+          "widget": {
+            "name": "wtitle01",
+            "textbox_spec": "# SFDC Account Consumption & Forecast\n\nParameters: SFDC Account ID, Historical Start/End, Forecast Start/End, Yr1/Yr2/Yr3 organic growth %.\nSource: main.fin_live_gold.paid_usage_metering"
+          },
+          "position": { "x": 0, "y": 0, "width": 6, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "wparam_sfdc",
+            "queries": [
+              {
+                "name": "p_sfdc_account_id",
+                "query": {
+                  "datasetName": "a1b2c3d4",
+                  "parameters": [{ "name": "sfdc_account_id", "keyword": "sfdc_account_id" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [{ "parameterName": "sfdc_account_id", "queryName": "p_sfdc_account_id" }]
+              },
+              "frame": { "showTitle": true, "title": "SFDC Account ID" }
+            }
+          },
+          "position": { "x": 0, "y": 3, "width": 2, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "wparam_hist_start",
+            "queries": [
+              {
+                "name": "p_historical_start",
+                "query": {
+                  "datasetName": "a1b2c3d4",
+                  "parameters": [{ "name": "historical_start", "keyword": "historical_start" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [{ "parameterName": "historical_start", "queryName": "p_historical_start" }]
+              },
+              "frame": { "showTitle": true, "title": "Historical Start" }
+            }
+          },
+          "position": { "x": 2, "y": 3, "width": 1, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "wparam_hist_end",
+            "queries": [
+              {
+                "name": "p_historical_end",
+                "query": {
+                  "datasetName": "a1b2c3d4",
+                  "parameters": [{ "name": "historical_end", "keyword": "historical_end" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [{ "parameterName": "historical_end", "queryName": "p_historical_end" }]
+              },
+              "frame": { "showTitle": true, "title": "Historical End" }
+            }
+          },
+          "position": { "x": 3, "y": 3, "width": 1, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "wparam_fc_start",
+            "queries": [
+              {
+                "name": "p_forecast_start",
+                "query": {
+                  "datasetName": "e5f6a7b8",
+                  "parameters": [{ "name": "forecast_start", "keyword": "forecast_start" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [{ "parameterName": "forecast_start", "queryName": "p_forecast_start" }]
+              },
+              "frame": { "showTitle": true, "title": "Forecast Start" }
+            }
+          },
+          "position": { "x": 4, "y": 3, "width": 1, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "wparam_fc_end",
+            "queries": [
+              {
+                "name": "p_forecast_end",
+                "query": {
+                  "datasetName": "e5f6a7b8",
+                  "parameters": [{ "name": "forecast_end", "keyword": "forecast_end" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [{ "parameterName": "forecast_end", "queryName": "p_forecast_end" }]
+              },
+              "frame": { "showTitle": true, "title": "Forecast End" }
+            }
+          },
+          "position": { "x": 5, "y": 3, "width": 1, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "wparam_yr1",
+            "queries": [
+              {
+                "name": "p_organic_growth_yr1",
+                "query": {
+                  "datasetName": "e5f6a7b8",
+                  "parameters": [{ "name": "organic_growth_yr1", "keyword": "organic_growth_yr1" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [{ "parameterName": "organic_growth_yr1", "queryName": "p_organic_growth_yr1" }]
+              },
+              "frame": { "showTitle": true, "title": "Yr1 growth %" }
+            }
+          },
+          "position": { "x": 0, "y": 4, "width": 1, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "wparam_yr2",
+            "queries": [
+              {
+                "name": "p_organic_growth_yr2",
+                "query": {
+                  "datasetName": "e5f6a7b8",
+                  "parameters": [{ "name": "organic_growth_yr2", "keyword": "organic_growth_yr2" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [{ "parameterName": "organic_growth_yr2", "queryName": "p_organic_growth_yr2" }]
+              },
+              "frame": { "showTitle": true, "title": "Yr2 growth %" }
+            }
+          },
+          "position": { "x": 1, "y": 4, "width": 1, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "wparam_yr3",
+            "queries": [
+              {
+                "name": "p_organic_growth_yr3",
+                "query": {
+                  "datasetName": "e5f6a7b8",
+                  "parameters": [{ "name": "organic_growth_yr3", "keyword": "organic_growth_yr3" }],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [{ "parameterName": "organic_growth_yr3", "queryName": "p_organic_growth_yr3" }]
+              },
+              "frame": { "showTitle": true, "title": "Yr3 growth %" }
+            }
+          },
+          "position": { "x": 2, "y": 4, "width": 1, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "wtable_hist",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "a1b2c3d4",
+                  "fields": [
+                    { "name": "sfdc_account_id", "expression": "`sfdc_account_id`" },
+                    { "name": "sfdc_workspace_id", "expression": "`sfdc_workspace_id`" },
+                    { "name": "sfdc_workspace_name", "expression": "`sfdc_workspace_name`" },
+                    { "name": "sku_name", "expression": "`sku_name`" },
+                    { "name": "month", "expression": "`month`" },
+                    { "name": "usage_quantity", "expression": "`usage_quantity`" },
+                    { "name": "usage_dollars", "expression": "`usage_dollars`" },
+                    { "name": "usage_dollars_at_list", "expression": "`usage_dollars_at_list`" }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  { "fieldName": "sfdc_account_id", "type": "string", "displayAs": "string", "visible": true, "order": 0, "title": "sfdc_account_id", "displayName": "sfdc_account_id" },
+                  { "fieldName": "sfdc_workspace_id", "type": "string", "displayAs": "string", "visible": true, "order": 1, "title": "sfdc_workspace_id", "displayName": "sfdc_workspace_id" },
+                  { "fieldName": "sfdc_workspace_name", "type": "string", "displayAs": "string", "visible": true, "order": 2, "title": "sfdc_workspace_name", "displayName": "sfdc_workspace_name" },
+                  { "fieldName": "sku_name", "type": "string", "displayAs": "string", "visible": true, "order": 3, "title": "sku_name", "displayName": "sku_name" },
+                  { "fieldName": "month", "type": "datetime", "displayAs": "datetime", "visible": true, "order": 4, "title": "month", "displayName": "month" },
+                  { "fieldName": "usage_quantity", "type": "decimal", "displayAs": "number", "visible": true, "order": 5, "title": "usage_quantity", "displayName": "usage_quantity" },
+                  { "fieldName": "usage_dollars", "type": "decimal", "displayAs": "number", "visible": true, "order": 6, "title": "usage_dollars", "displayName": "usage_dollars" },
+                  { "fieldName": "usage_dollars_at_list", "type": "decimal", "displayAs": "number", "visible": true, "order": 7, "title": "usage_dollars_at_list", "displayName": "usage_dollars_at_list" }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Historical consumption report" }
+            }
+          },
+          "position": { "x": 0, "y": 5, "width": 6, "height": 8 }
+        },
+        {
+          "widget": {
+            "name": "wtable_forecast",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e5f6a7b8",
+                  "fields": [
+                    { "name": "month", "expression": "`month`" },
+                    { "name": "year_bucket", "expression": "`year_bucket`" },
+                    { "name": "organic_growth_pct", "expression": "`organic_growth_pct`" },
+                    { "name": "projected_usage_dollars", "expression": "`projected_usage_dollars`" }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  { "fieldName": "month", "type": "datetime", "displayAs": "datetime", "visible": true, "order": 0, "title": "month", "displayName": "month" },
+                  { "fieldName": "year_bucket", "type": "string", "displayAs": "string", "visible": true, "order": 1, "title": "year_bucket", "displayName": "year_bucket" },
+                  { "fieldName": "organic_growth_pct", "type": "decimal", "displayAs": "number", "visible": true, "order": 2, "title": "organic_growth_pct", "displayName": "organic_growth_pct" },
+                  { "fieldName": "projected_usage_dollars", "type": "decimal", "displayAs": "number", "visible": true, "order": 3, "title": "projected_usage_dollars", "displayName": "projected_usage_dollars" }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Forecast scenario (Yr1/Yr2/Yr3)" }
+            }
+          },
+          "position": { "x": 0, "y": 13, "width": 6, "height": 8 }
+        }
+      ]
+    }
+  ]
+}

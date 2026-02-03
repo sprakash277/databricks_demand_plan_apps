@@ -1,8 +1,21 @@
 # Databricks AI/BI Dashboard — SFDC Consumption & Forecast
 
-This folder contains **parameterized SQL datasets** and setup steps to build a **Databricks AI/BI dashboard** (Lakeview) that mirrors the logic of the Streamlit dashboard: SFDC account consumption report and forecast scenario with Yr1/Yr2/Yr3 organic growth.
+This folder contains **parameterized SQL datasets** and an **importable dashboard file** for a **Databricks AI/BI dashboard** (Lakeview) that mirrors the logic of the Streamlit dashboard: SFDC account consumption report and forecast scenario with Yr1/Yr2/Yr3 organic growth.
 
 **Source table**: `main.fin_live_gold.paid_usage_metering`
+
+---
+
+## Import dashboard from file (recommended)
+
+1. In Databricks: **SQL** → **Dashboards** (or **AI/BI**) → **Create** → **Import dashboard from file**.
+2. Select the file **`SFDC_Consumption_Forecast_Dashboard.lvdash.json`** from this folder.
+3. Choose a workspace path (e.g. `/Users/your.email@org.com/SFDC_Consumption_Forecast_Dashboard.lvdash.json`) and import.
+4. Open the dashboard, set a **default SFDC Account ID** in the Data tab for both datasets (run the query once with a valid account ID to save defaults), then use the filter widgets on the canvas.
+5. Optionally **Publish** the dashboard and attach a SQL warehouse.
+
+If your workspace uses **Workspace API** instead of the UI:
+- **Import**: `POST /api/2.0/workspace/import` with `path` ending in `.lvdash.json`, `format: "AUTO"`, and `content` = base64-encoded JSON of the file.
 
 ---
 
@@ -17,6 +30,7 @@ This folder contains **parameterized SQL datasets** and setup steps to build a *
 
 | File | Purpose |
 |------|---------|
+| **`SFDC_Consumption_Forecast_Dashboard.lvdash.json`** | **Importable AI/BI dashboard file.** Use **Import dashboard from file** in Databricks to create the dashboard in one step. |
 | `01_historical_consumption.sql` | Historical consumption report dataset (params: sfdc_account_id, historical_start, historical_end). |
 | `02_baseline_last_month.sql` | Optional: baseline total for last month (params: sfdc_account_id, historical_end). |
 | `03_forecast_scenario.sql` | Forecast months with year_bucket, organic_growth_pct, projected_usage_dollars (params: forecast_start, forecast_end, organic_growth_yr1/yr2/yr3, sfdc_account_id, historical_end). |
