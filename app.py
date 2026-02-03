@@ -26,11 +26,26 @@ def dataframe_to_xlsx_bytes(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 # -----------------------------------------------------------------------------
-# Connection (use SQL warehouse resource or manual HTTP path)
+# Connection (same-workspace or other-workspace SQL warehouse)
 # -----------------------------------------------------------------------------
 
+def _is_remote_workspace() -> bool:
+    """True if REMOTE_WORKSPACE_HOST and REMOTE_HTTP_PATH are set (other-workspace mode)."""
+    return bool(os.getenv("REMOTE_WORKSPACE_HOST") and os.getenv("REMOTE_HTTP_PATH"))
+
+
 @st.cache_resource
-def get_connection(http_path: str):
+def get_connection(server_hostname: str, http_path: str, use_remote_token: bool = False):
+    """Connect to a SQL warehouse. Same-workspace uses Config(); other-workspace uses REMOTE_* env + token."""
+    if use_remote_token:
+        token = os.getenv("REMOTE_DATABRICKS_TOKEN", "").strip()
+        if not token:
+            raise ValueError("REMOTE_DATABRICKS_TOKEN is required for other-workspace connection.")
+        return sql.connect(
+            server_hostname=server_hostname,
+            http_path=http_path,
+            access_token=token,
+        )
     cfg = Config()
     return sql.connect(
         server_hostname=cfg.host,
@@ -39,12 +54,20 @@ def get_connection(http_path: str):
     )
 
 
-def get_http_path() -> str | None:
-    """HTTP path: from env (App resource) or from session state (user input)."""
+def get_connection_params() -> tuple[str, str, bool]:
+    """
+    Return (server_hostname, http_path, use_remote_token).
+    - Other-workspace: REMOTE_WORKSPACE_HOST, REMOTE_HTTP_PATH, REMOTE_DATABRICKS_TOKEN (or valueFrom secret).
+    - Same-workspace: app host, DATABRICKS_WAREHOUSE_ID or DATABRICKS_HTTP_PATH.
+    """
+    if _is_remote_workspace():
+        host = os.getenv("REMOTE_WORKSPACE_HOST", "").strip()
+        path = os.getenv("REMOTE_HTTP_PATH", "").strip()
+        return host, path, True
     warehouse_id = os.getenv("DATABRICKS_WAREHOUSE_ID")
-    if warehouse_id:
-        return f"/sql/1.0/warehouses/{warehouse_id}"
-    return os.getenv("DATABRICKS_HTTP_PATH") or None
+    http_path = f"/sql/1.0/warehouses/{warehouse_id}" if warehouse_id else (os.getenv("DATABRICKS_HTTP_PATH") or "")
+    cfg = Config()
+    return cfg.host, http_path, False
 
 
 # -----------------------------------------------------------------------------
@@ -54,8 +77,12 @@ def get_http_path() -> str | None:
 st.set_page_config(page_title="C360 Consumption Analytics", layout="wide")
 st.title("C360 Consumption Analytics")
 
-http_path = get_http_path()
+server_hostname, http_path, use_remote = get_connection_params()
+
 if not http_path:
+    if _is_remote_workspace():
+        st.warning("REMOTE_WORKSPACE_HOST and REMOTE_HTTP_PATH are set but REMOTE_HTTP_PATH is empty. Set REMOTE_HTTP_PATH (e.g. /sql/1.0/warehouses/<id>) in app env.")
+        st.stop()
     http_path = st.sidebar.text_input(
         "SQL Warehouse HTTP Path",
         value="",
@@ -65,8 +92,18 @@ if not http_path:
     if not http_path:
         st.info("Configure a SQL warehouse resource for this app, or enter the HTTP path in the sidebar.")
         st.stop()
+    server_hostname = Config().host
+elif use_remote and not server_hostname:
+    st.warning("REMOTE_HTTP_PATH is set but REMOTE_WORKSPACE_HOST is empty. Set both in app env.")
+    st.stop()
+
+if use_remote and not (os.getenv("REMOTE_DATABRICKS_TOKEN") or "").strip():
+    st.warning("Other-workspace mode is on but REMOTE_DATABRICKS_TOKEN is not set. Add a secret resource and set env REMOTE_DATABRICKS_TOKEN with valueFrom to that secret.")
+    st.stop()
 
 with st.sidebar:
+    if use_remote:
+        st.caption("Using SQL warehouse in another workspace (REMOTE_* env).")
     st.header("Parameters")
     account_name = st.text_input(
         "Account Name (ILIKE)",
@@ -195,7 +232,7 @@ LIMIT {int(result_limit)}
 # -----------------------------------------------------------------------------
 
 try:
-    conn = get_connection(http_path)
+    conn = get_connection(server_hostname, http_path, use_remote)
 except Exception as e:
     st.error(f"Could not connect to SQL warehouse: {e}")
     st.stop()

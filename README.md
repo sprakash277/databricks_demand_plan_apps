@@ -45,6 +45,53 @@ A [Databricks App](https://docs.databricks.com/aws/en/dev-tools/databricks-apps)
    databricks apps deploy consumption-analytics --source-code-path /Workspace/Users/<you>/databricks_demand_plan_apps
    ```
 
+### Other-workspace: use a SQL warehouse in a different workspace
+
+The app can connect to a SQL warehouse in **another** Databricks workspace (not the one where the app runs). You configure this with environment variables; the app does **not** use the built-in SQL warehouse resource for the remote warehouse.
+
+**Steps:**
+
+1. **Create a secret for the other workspace’s token**  
+   In the workspace where the app runs: **Settings** → **Secrets** (or use a secret scope). Create a secret that holds a [personal access token (PAT)](https://docs.databricks.com/aws/en/dev-tools/auth.html#pat) or OAuth credentials for the **other** workspace (the one that has the SQL warehouse and the data).  
+   Example scope: `app-secrets`, key: `remote-databricks-token`.
+
+2. **Get the other workspace’s connection details**  
+   In the **other** workspace: open the target SQL warehouse → **Connection details**. Note:
+   - **Server hostname** (e.g. `adb-1234567890123456.7.azuredatabricks.net` or `other-workspace.cloud.databricks.com`)
+   - **HTTP path** (e.g. `/sql/1.0/warehouses/abc123def456`)
+
+3. **Configure the app’s `app.yaml`**  
+   In the app folder, under `env`, add (or uncomment and set):
+
+   ```yaml
+   env:
+     - name: REMOTE_WORKSPACE_HOST
+       value: "other-workspace.cloud.databricks.com"   # hostname from step 2
+     - name: REMOTE_HTTP_PATH
+       value: "/sql/1.0/warehouses/abc123def456"     # HTTP path from step 2
+     - name: REMOTE_DATABRICKS_TOKEN
+       valueFrom: remote_databricks_token            # secret scope + key, e.g. app-secrets/remote-databricks-token
+   ```
+
+   For `valueFrom`, use the resource key you gave the secret when adding it as an app resource (e.g. `remote_databricks_token`), or the scope/key format your workspace uses for env injection.
+
+4. **Add the secret as an app resource (recommended)**  
+   When editing the app: **Configure** → **App resources** → **+ Add resource** → **Secret**. Grant the app access to the secret (e.g. **Can read**), set the resource key to match `valueFrom` (e.g. `remote_databricks_token`). This keeps the token out of `app.yaml` and uses secure injection.
+
+5. **Redeploy the app**  
+   Deploy the app so the new env and secret are applied. On load, the app will see `REMOTE_WORKSPACE_HOST` and `REMOTE_HTTP_PATH`, and will use `REMOTE_DATABRICKS_TOKEN` to connect to that warehouse instead of the local one.
+
+**Behavior:**
+
+- If **all three** of `REMOTE_WORKSPACE_HOST`, `REMOTE_HTTP_PATH`, and `REMOTE_DATABRICKS_TOKEN` are set, the app connects to the **other** workspace’s SQL warehouse using that host, path, and token.
+- If none of the remote env vars are set, the app uses the **same-workspace** behavior (SQL warehouse resource or sidebar HTTP path).
+
+**Security:**
+
+- Never put the token in `app.yaml` as plain text. Always use a secret and `valueFrom`.
+- The token must have access to the SQL warehouse and the tables (e.g. `main.gtm_data.c360_consumption_account_monthly`) in the **other** workspace.
+- Prefer a service principal or a PAT with minimal scope and rotation.
+
 ### App files
 
 | File | Purpose |

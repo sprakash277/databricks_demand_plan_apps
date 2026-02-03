@@ -7,10 +7,17 @@ command:
   - --server.headless
   - "true"
 env:
-  # Optional: set STREAMLIT_GATHER_USAGE_STATS to false to disable usage collection
   - name: STREAMLIT_GATHER_USAGE_STATS
     value: "false"
-  # SQL warehouse: add a "sql-warehouse" resource in the Apps UI and reference it:
+  # --- Same-workspace: SQL warehouse in this app's workspace ---
   # - name: DATABRICKS_WAREHOUSE_ID
   #   valueFrom: sql_warehouse
-  # Then app will use /sql/1.0/warehouses/<id> as http_path. If not set, app shows a text input for HTTP path.
+  # Or DATABRICKS_HTTP_PATH. If unset, app shows sidebar input for HTTP path.
+  # --- Other-workspace: SQL warehouse in a different workspace ---
+  # Set all three (host and path as value, token via valueFrom secret):
+  # - name: REMOTE_WORKSPACE_HOST
+  #   value: "other-workspace.cloud.databricks.com"
+  # - name: REMOTE_HTTP_PATH
+  #   value: "/sql/1.0/warehouses/<warehouse-id>"
+  # - name: REMOTE_DATABRICKS_TOKEN
+  #   valueFrom: remote_databricks_token
