@@ -1,0 +1,6 @@
+# C360 Consumption Analytics Databricks App
+# See: https://docs.databricks.com/aws/en/dev-tools/databricks-apps/dependencies
+databricks-sdk
+databricks-sql-connector
+streamlit
+pandas

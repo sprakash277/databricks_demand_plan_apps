@@ -1,0 +1,16 @@
+# Databricks App runtime config for C360 Consumption Analytics
+# See: https://docs.databricks.com/aws/en/dev-tools/databricks-apps/app-runtime
+command:
+  - streamlit
+  - run
+  - app.py
+  - --server.headless
+  - "true"
+env:
+  # Optional: set STREAMLIT_GATHER_USAGE_STATS to false to disable usage collection
+  - name: STREAMLIT_GATHER_USAGE_STATS
+    value: "false"
+  # SQL warehouse: add a "sql-warehouse" resource in the Apps UI and reference it:
+  # - name: DATABRICKS_WAREHOUSE_ID
+  #   valueFrom: sql_warehouse
+  # Then app will use /sql/1.0/warehouses/<id> as http_path. If not set, app shows a text input for HTTP path.
