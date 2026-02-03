@@ -9,10 +9,21 @@ Deploy as a Databricks App: https://docs.databricks.com/aws/en/dev-tools/databri
 
 import os
 from datetime import date
+from io import BytesIO
 
+import pandas as pd
 import streamlit as st
 from databricks import sql
 from databricks.sdk.core import Config
+
+
+def dataframe_to_xlsx_bytes(df: pd.DataFrame) -> bytes:
+    """Write DataFrame to Excel (.xlsx) and return bytes for download."""
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Data")
+    buffer.seek(0)
+    return buffer.getvalue()
 
 # -----------------------------------------------------------------------------
 # Connection (use SQL warehouse resource or manual HTTP path)
@@ -199,6 +210,15 @@ with st.spinner("Running historical consumption query…"):
     try:
         df_hist = run_query(conn, historical_sql, "historical")
         st.dataframe(df_hist, use_container_width=True)
+        if not df_hist.empty:
+            xlsx_hist = dataframe_to_xlsx_bytes(df_hist)
+            st.download_button(
+                label="Download as XLS",
+                data=xlsx_hist,
+                file_name="historical_consumption.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_historical",
+            )
     except Exception as e:
         st.error(f"Query failed: {e}")
         raise
@@ -208,5 +228,14 @@ with st.spinner("Running forecast-period query…"):
     try:
         df_forecast = run_query(conn, forecast_sql, "forecast")
         st.dataframe(df_forecast, use_container_width=True)
+        if not df_forecast.empty:
+            xlsx_forecast = dataframe_to_xlsx_bytes(df_forecast)
+            st.download_button(
+                label="Download as XLS",
+                data=xlsx_forecast,
+                file_name="forecast_period.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_forecast",
+            )
     except Exception as e:
         st.error(f"Query failed: {e}")

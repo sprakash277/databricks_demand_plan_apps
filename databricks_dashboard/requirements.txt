@@ -1,0 +1,7 @@
+# SFDC Consumption & Forecast Dashboard
+databricks-sdk
+databricks-sql-connector
+streamlit
+pandas
+openpyxl
+python-dateutil

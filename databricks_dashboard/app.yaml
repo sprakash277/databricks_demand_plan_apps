@@ -1,0 +1,11 @@
+# Databricks App runtime for SFDC Consumption & Forecast Dashboard
+command:
+  - streamlit
+  - run
+  - app.py
+  - --server.headless
+  - "true"
+env:
+  - name: STREAMLIT_GATHER_USAGE_STATS
+    value: "false"
+  # Optional: add SQL warehouse resource and set DATABRICKS_WAREHOUSE_ID via valueFrom
